@@ -1,12 +1,10 @@
 {
   "compilerOptions": {
-    "rootDir": "./src",
-    "outDir": "./dist",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
     "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "bundler",
+    "esModuleInterop": true,
     "strict": true,
-    "verbatimModuleSyntax": false,
     "skipLibCheck": true
   }
 }
