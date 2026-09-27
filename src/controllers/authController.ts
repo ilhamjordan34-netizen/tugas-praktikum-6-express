@@ -1,74 +1,48 @@
-import { Request, Response } from 'express';
+import type { Request, Response } from 'express';
 import bcrypt from 'bcrypt';
 import jwt from 'jsonwebtoken';
-import pool from '../config/db'; // sesuaikan jika namanya database.ts (misal: '../config/database')
+import { UserModel } from '../models/userModel';
+import type { RegisterRequest, LoginRequest, JwtUserPayload } from '../types/auth';
+import { sendSuccess, sendError } from '../utils/response';
 
 export const register = async (req: Request, res: Response): Promise<void> => {
-  const { username, password } = req.body;
-
+  const payload: RegisterRequest = req.body;
   try {
-    // Cek apakah username sudah ada
-    const [existingUsers]: any = await pool.query(
-      'SELECT * FROM users WHERE username = ?',
-      [username]
-    );
-
-    if (existingUsers.length > 0) {
-      res.status(400).json({ success: false, message: 'Username sudah digunakan!' });
+    const hashedPassword = await bcrypt.hash(payload.password, 10);
+    await UserModel.create(payload.username, payload.email, hashedPassword);
+    sendSuccess(res, 'Registrasi berhasil!');
+  } catch (error: any) {
+    if (error.code === 'ER_DUP_ENTRY') {
+      sendError(res, 'Username atau Email sudah terdaftar!', 409);
       return;
     }
-
-    // Hash password
-    const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Simpan user baru ke database
-    await pool.query(
-      'INSERT INTO users (username, password) VALUES (?, ?)',
-      [username, hashedPassword]
-    );
-
-    res.status(201).json({ success: true, message: 'Register berhasil! Silakan login.' });
-  } catch (error: any) {
-    console.error('Error Register:', error);
-    res.status(500).json({ success: false, message: 'Error server.' });
+    sendError(res, 'Error server.', 500);
   }
 };
 
 export const login = async (req: Request, res: Response): Promise<void> => {
-  const { username, password } = req.body;
-
+  const payload: LoginRequest = req.body;
   try {
-    // Cari user di database
-    const [users]: any = await pool.query(
-      'SELECT * FROM users WHERE username = ?',
-      [username]
+    const user = await UserModel.findByUsername(payload.username);
+    if (!user || !(await bcrypt.compare(payload.password, user.password))) {
+      sendError(res, 'Username atau password salah!', 401);
+      return;
+    }
+
+    const tokenPayload: JwtUserPayload = {
+      id: user.id,
+      username: user.username,
+      email: user.email
+    };
+
+    const token = jwt.sign(
+      tokenPayload,
+      process.env.JWT_SECRET as string,
+      { expiresIn: '2h' }
     );
 
-    if (users.length === 0) {
-      res.status(400).json({ success: false, message: 'Username atau password salah!' });
-      return;
-    }
-
-    const user = users[0];
-
-    // Cek password
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      res.status(400).json({ success: false, message: 'Username atau password salah!' });
-      return;
-    }
-
-    // Buat JWT Token
-    const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_bebas';
-    const token = jwt.sign({ userId: user.id }, JWT_SECRET, { expiresIn: '1d' });
-
-    res.status(200).json({
-      success: true,
-      message: 'Login berhasil!',
-      token: token
-    });
-  } catch (error: any) {
-    console.error('Error Login:', error);
-    res.status(500).json({ success: false, message: 'Error server.' });
+    sendSuccess(res, 'Login berhasil!', { token });
+  } catch {
+    sendError(res, 'Error server.', 500);
   }
 };

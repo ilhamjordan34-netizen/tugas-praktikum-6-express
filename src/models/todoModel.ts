@@ -1,16 +1,24 @@
 import pool from '../config/db';
 
 export const TodoModel = {
-  // Ambil semua todo milik user
-  getByUserId: async (userId: number) => {
-    const [rows]: any = await pool.query(
-      'SELECT * FROM todos WHERE user_id = ?',
-      [userId]
+  // Method baru untuk Pagination (Tugas Praktikum 6)
+  getByUserId: async (userId: number, limit: number, offset: number) => {
+    const [rows] = await pool.query(
+      'SELECT * FROM todos WHERE user_id = ? ORDER BY id DESC LIMIT ? OFFSET ?',
+      [userId, limit, offset]
     );
     return rows;
   },
 
-  // Ambil satu todo berdasarkan ID
+  countByUserId: async (userId: number) => {
+    const [rows]: any = await pool.query(
+      'SELECT COUNT(*) AS total FROM todos WHERE user_id = ?',
+      [userId]
+    );
+    return rows[0].total as number;
+  },
+
+  // Method lanjutan dari praktikum sebelumnya
   getById: async (id: number, userId: number) => {
     const [rows]: any = await pool.query(
       'SELECT * FROM todos WHERE id = ? AND user_id = ?',
@@ -19,30 +27,45 @@ export const TodoModel = {
     return rows[0];
   },
 
-  // Tambah todo baru (menambahkan nilai default is_completed = 0)
-  create: async (task: string, userId: number) => {
+  create: async (userId: number, task: string) => {
     const [result]: any = await pool.query(
-      'INSERT INTO todos (task, user_id, is_completed) VALUES (?, ?, ?)',
-      [task, userId, 0]
+      'INSERT INTO todos (user_id, task) VALUES (?, ?)',
+      [userId, task]
     );
-    return result.insertId;
+    return result.insertId as number;
   },
 
-  // Update task atau status is_completed
-  update: async (id: number, task: string, isCompleted: boolean, userId: number) => {
+  update: async (id: number, task?: string, isCompleted?: boolean, userId?: number) => {
+    const updates: string[] = [];
+    const values: any[] = [];
+
+    if (task !== undefined) {
+      updates.push('task = ?');
+      values.push(task);
+    }
+
+    if (isCompleted !== undefined) {
+      updates.push('is_completed = ?');
+      values.push(isCompleted);
+    }
+
+    if (updates.length === 0) return 0;
+
+    values.push(id, userId);
+
     const [result]: any = await pool.query(
-      'UPDATE todos SET task = ?, is_completed = ? WHERE id = ? AND user_id = ?',
-      [task, isCompleted, id, userId]
+      `UPDATE todos SET ${updates.join(', ')} WHERE id = ? AND user_id = ?`,
+      values
     );
-    return result.affectedRows;
+
+    return result.affectedRows as number;
   },
 
-  // Hapus todo berdasarkan id dan userId
   delete: async (id: number, userId: number) => {
     const [result]: any = await pool.query(
       'DELETE FROM todos WHERE id = ? AND user_id = ?',
       [id, userId]
     );
-    return result.affectedRows;
+    return result.affectedRows as number;
   }
 };

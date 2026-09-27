@@ -1,30 +1,26 @@
-import { Request, Response, NextFunction } from 'express';
+import type { Request, Response, NextFunction } from 'express';
 import jwt from 'jsonwebtoken';
+import type { JwtUserPayload } from '../types/auth';
+import { sendError } from '../utils/response';
 
 export const verifyToken = (req: Request, res: Response, next: NextFunction): void => {
-  const authHeader = req.headers.authorization;
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
 
-  if (!authHeader || !authHeader.startsWith('Bearer ')) {
-    res.status(401).json({ success: false, message: 'Akses ditolak, token tidak ditemukan!' });
+  if (!token) {
+    sendError(res, 'Akses ditolak. Token tidak ditemukan!', 401);
     return;
   }
 
-  const token = authHeader.split(' ')[1];
-
   try {
-    const JWT_SECRET = process.env.JWT_SECRET || 'secret_key_bebas';
-    const decoded: any = jwt.verify(token, JWT_SECRET);
-
-    // Ambil id dari token (menangani baik properti userId maupun id)
-    res.locals.userId = decoded.userId || decoded.id;
-
-    if (!res.locals.userId) {
-      res.status(401).json({ success: false, message: 'Token tidak valid (User ID kosong).' });
-      return;
-    }
-
+    const decoded = jwt.verify(
+      token,
+      process.env.JWT_SECRET as string
+    ) as JwtUserPayload;
+    
+    req.user = decoded;
     next();
-  } catch (error) {
-    res.status(401).json({ success: false, message: 'Token tidak valid atau sudah kadaluwarsa.' });
+  } catch {
+    sendError(res, 'Sesi tidak valid atau kedaluwarsa!', 403);
   }
 };
